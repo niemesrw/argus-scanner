@@ -1,0 +1,51 @@
+# Development Dockerfile with hot-reload and debugging tools
+FROM python:3.11-slim
+
+# Install development dependencies
+RUN apt-get update && apt-get install -y \
+    nmap \
+    gcc \
+    g++ \
+    make \
+    libssl-dev \
+    libffi-dev \
+    python3-dev \
+    git \
+    vim \
+    curl \
+    iputils-ping \
+    net-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install Python development tools
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+    ipython \
+    ipdb \
+    pytest \
+    pytest-cov \
+    black \
+    flake8 \
+    mypy \
+    watchdog
+
+# Copy requirements
+COPY requirements-minimal.txt .
+RUN pip install --no-cache-dir -r requirements-minimal.txt
+
+# Environment for development
+ENV PYTHONUNBUFFERED=1 \
+    ARGUS_ENV=development \
+    ARGUS_MOCK_MODE=true \
+    FLASK_DEBUG=1
+
+# Mount points for development
+VOLUME ["/app/src", "/app/data", "/app/logs"]
+
+# Expose ports (web + debugger)
+EXPOSE 8080 5678
+
+# Run the application directly in development
+CMD ["python", "-m", "src.main"]

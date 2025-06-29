@@ -1,0 +1,52 @@
+services:
+  argus:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    container_name: argus-scanner
+    volumes:
+      - ./src:/app/src
+      - ./config:/app/config
+      - argus_data:/app/data
+      - argus_logs:/app/logs
+    ports:
+      - "8080:8080"  # Web dashboard
+      - "5678:5678"  # Python debugger
+    environment:
+      - ARGUS_ENV=development
+      - ARGUS_MOCK_MODE=true
+      - ARGUS_DB_PATH=/app/data/argus.db
+      - ARGUS_LOG_LEVEL=DEBUG
+      - ARGUS_SCAN_INTERVAL=300  # 5 minutes in dev
+      - ARGUS_NETWORK_RANGE=192.168.1.0/24
+    networks:
+      - argus_net
+    restart: unless-stopped
+
+  # Mock vulnerable services for testing
+  mock-web:
+    image: vulnerables/web-dvwa:latest
+    container_name: mock-vulnerable-web
+    networks:
+      - argus_net
+    profiles:
+      - testing
+
+  mock-ssh:
+    image: rastasheep/ubuntu-sshd:18.04
+    container_name: mock-vulnerable-ssh
+    networks:
+      - argus_net
+    profiles:
+      - testing
+
+volumes:
+  argus_data:
+  argus_logs:
+
+networks:
+  argus_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

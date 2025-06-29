@@ -1,0 +1,604 @@
+{% extends "base.html" %}
+
+{% block title %}Scans - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div x-data="scansApp()" x-init="init()">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Network Scans</h1>
+        <div class="d-flex gap-2">
+            <select x-model="filterType" @change="applyFilters()" class="form-select" style="width: auto;">
+                <option value="">All Types</option>
+                <option value="discovery">Discovery</option>
+                <option value="vulnerability">Vulnerability</option>
+                <option value="port">Port Scan</option>
+                <option value="targeted">Targeted</option>
+            </select>
+            <select x-model="filterStatus" @change="applyFilters()" class="form-select" style="width: auto;">
+                <option value="">All Status</option>
+                <option value="running">Running</option>
+                <option value="completed">Completed</option>
+                <option value="failed">Failed</option>
+                <option value="cancelled">Cancelled</option>
+            </select>
+            <div class="btn-group">
+                <button @click="refresh()" class="btn btn-outline-primary">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh
+                </button>
+                <button @click="startNewScan()" class="btn btn-primary">
+                    <i class="bi bi-play-circle"></i> New Scan
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="card stat-card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Total Scans</h6>
+                    <h3 class="mb-0" x-text="scans.length">-</h3>
+                    <small class="text-muted">All time</small>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card stat-card warning">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Running</h6>
+                    <h3 class="mb-0" x-text="runningScans">-</h3>
+                    <small class="text-warning">Active scans</small>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card stat-card success">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Last 24 Hours</h6>
+                    <h3 class="mb-0" x-text="recentScans">-</h3>
+                    <small class="text-success">Completed</small>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card stat-card danger">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Failed</h6>
+                    <h3 class="mb-0" x-text="failedScans">-</h3>
+                    <small class="text-danger">Need attention</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Current Running Scans -->
+    <div x-show="runningScans > 0" class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="bi bi-arrow-repeat text-warning me-2"></i>
+                Currently Running Scans
+            </h5>
+        </div>
+        <div class="card-body">
+            <template x-for="scan in currentlyRunning" :key="scan.id">
+                <div class="d-flex justify-content-between align-items-center mb-3 p-3 bg-light rounded">
+                    <div>
+                        <strong x-text="formatScanType(scan.scan_type)"></strong>
+                        <span x-text="scan.target || 'Network-wide'"></span>
+                        <br>
+                        <small class="text-muted">
+                            Started <span x-text="formatTime(scan.started_at)"></span>
+                            <span x-show="scan.progress"> • Progress: <span x-text="scan.progress"></span>%</span>
+                        </small>
+                    </div>
+                    <div class="text-end">
+                        <div class="progress mb-2" style="width: 200px;">
+                            <div 
+                                class="progress-bar progress-bar-striped progress-bar-animated"
+                                :style="`width: ${scan.progress || 0}%`">
+                            </div>
+                        </div>
+                        <button @click="cancelScan(scan.id)" class="btn btn-sm btn-outline-danger">
+                            <i class="bi bi-stop-circle"></i> Cancel
+                        </button>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+    
+    <!-- Scan History -->
+    <div class="card">
+        <div class="card-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Scan History</h5>
+                <div class="d-flex gap-2">
+                    <input 
+                        x-model="searchTerm" 
+                        @input="applyFilters()" 
+                        type="text" 
+                        class="form-control form-control-sm" 
+                        placeholder="Search scans..."
+                        style="width: 200px;">
+                    <span class="badge bg-secondary" x-text="`${filteredScans.length} scans`"></span>
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th @click="sortBy('scan_type')" style="cursor: pointer;">
+                                Type
+                                <i class="bi bi-arrow-up-down ms-1"></i>
+                            </th>
+                            <th>Target</th>
+                            <th @click="sortBy('status')" style="cursor: pointer;">
+                                Status
+                                <i class="bi bi-arrow-up-down ms-1"></i>
+                            </th>
+                            <th>Duration</th>
+                            <th>Results</th>
+                            <th @click="sortBy('started_at')" style="cursor: pointer;">
+                                Started
+                                <i class="bi bi-arrow-up-down ms-1"></i>
+                            </th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="scan in paginatedScans" :key="scan.id">
+                            <tr>
+                                <td>
+                                    <span class="badge bg-primary" x-text="formatScanType(scan.scan_type)"></span>
+                                </td>
+                                <td>
+                                    <span x-text="scan.target || 'Network-wide'"></span>
+                                    <br>
+                                    <small class="text-muted" x-text="scan.target_description"></small>
+                                </td>
+                                <td>
+                                    <span 
+                                        :class="getStatusClass(scan.status)"
+                                        class="badge"
+                                        x-text="formatStatus(scan.status)">
+                                    </span>
+                                    <div x-show="scan.status === 'running' && scan.progress" class="mt-1">
+                                        <div class="progress" style="height: 4px;">
+                                            <div 
+                                                class="progress-bar"
+                                                :style="`width: ${scan.progress}%`">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span x-text="formatDuration(scan)"></span>
+                                </td>
+                                <td>
+                                    <div x-show="scan.status === 'completed'">
+                                        <span x-show="scan.devices_found" class="badge bg-info me-1">
+                                            <i class="bi bi-pc-display"></i> <span x-text="scan.devices_found"></span>
+                                        </span>
+                                        <span x-show="scan.vulnerabilities_found" class="badge bg-warning me-1">
+                                            <i class="bi bi-bug"></i> <span x-text="scan.vulnerabilities_found"></span>
+                                        </span>
+                                        <span x-show="scan.alerts_generated" class="badge bg-danger">
+                                            <i class="bi bi-bell"></i> <span x-text="scan.alerts_generated"></span>
+                                        </span>
+                                    </div>
+                                    <span x-show="scan.status !== 'completed'" class="text-muted">-</span>
+                                </td>
+                                <td>
+                                    <span x-text="formatTime(scan.started_at)"></span>
+                                    <br>
+                                    <small class="text-muted" x-text="scan.initiated_by || 'System'"></small>
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <button 
+                                            @click="viewScanDetails(scan)"
+                                            class="btn btn-outline-primary btn-sm">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                        <button 
+                                            x-show="scan.status === 'completed'"
+                                            @click="downloadReport(scan.id)"
+                                            class="btn btn-outline-secondary btn-sm">
+                                            <i class="bi bi-download"></i>
+                                        </button>
+                                        <button 
+                                            x-show="scan.status === 'running'"
+                                            @click="cancelScan(scan.id)"
+                                            class="btn btn-outline-danger btn-sm">
+                                            <i class="bi bi-stop-circle"></i>
+                                        </button>
+                                        <button 
+                                            x-show="scan.status === 'completed'"
+                                            @click="repeatScan(scan)"
+                                            class="btn btn-outline-success btn-sm">
+                                            <i class="bi bi-arrow-repeat"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
+                        <tr x-show="filteredScans.length === 0">
+                            <td colspan="7" class="text-center text-muted py-4">
+                                <i class="bi bi-search display-4 d-block mb-2"></i>
+                                No scans found
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Pagination -->
+            <div x-show="totalPages > 1" class="d-flex justify-content-between align-items-center mt-3">
+                <div>
+                    <span class="text-muted">
+                        Showing <span x-text="((currentPage - 1) * pageSize) + 1"></span> to 
+                        <span x-text="Math.min(currentPage * pageSize, filteredScans.length)"></span> of 
+                        <span x-text="filteredScans.length"></span> scans
+                    </span>
+                </div>
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item" :class="{ 'disabled': currentPage === 1 }">
+                            <button @click="currentPage = Math.max(1, currentPage - 1)" class="page-link">Previous</button>
+                        </li>
+                        <template x-for="page in visiblePages" :key="page">
+                            <li class="page-item" :class="{ 'active': page === currentPage }">
+                                <button @click="currentPage = page" class="page-link" x-text="page"></button>
+                            </li>
+                        </template>
+                        <li class="page-item" :class="{ 'disabled': currentPage === totalPages }">
+                            <button @click="currentPage = Math.min(totalPages, currentPage + 1)" class="page-link">Next</button>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- New Scan Modal -->
+<div class="modal fade" id="newScanModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Start New Scan</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form x-data="{ scanConfig: { scan_type: 'discovery', target: '', description: '' } }">
+                    <div class="mb-3">
+                        <label class="form-label">Scan Type</label>
+                        <select x-model="scanConfig.scan_type" class="form-select" required>
+                            <option value="discovery">Network Discovery</option>
+                            <option value="vulnerability">Vulnerability Assessment</option>
+                            <option value="port">Port Scan</option>
+                            <option value="targeted">Targeted Scan</option>
+                        </select>
+                        <div class="form-text">
+                            <div x-show="scanConfig.scan_type === 'discovery'">
+                                Discover devices on the network and gather basic information.
+                            </div>
+                            <div x-show="scanConfig.scan_type === 'vulnerability'">
+                                Comprehensive security vulnerability assessment.
+                            </div>
+                            <div x-show="scanConfig.scan_type === 'port'">
+                                Scan for open ports and running services.
+                            </div>
+                            <div x-show="scanConfig.scan_type === 'targeted'">
+                                Detailed scan of specific devices or IP ranges.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Target</label>
+                        <input 
+                            x-model="scanConfig.target" 
+                            type="text" 
+                            class="form-control" 
+                            placeholder="e.g., 192.168.1.0/24 or 192.168.1.100">
+                        <div class="form-text">
+                            Leave empty for network-wide scan. Use CIDR notation for ranges.
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Description (Optional)</label>
+                        <textarea 
+                            x-model="scanConfig.description" 
+                            class="form-control" 
+                            rows="2"
+                            placeholder="Purpose or notes about this scan..."></textarea>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <strong>Mock Mode:</strong> Scans will generate simulated results for demonstration purposes.
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button 
+                    @click="startScan(scanConfig); bootstrap.Modal.getInstance(document.getElementById('newScanModal')).hide()"
+                    class="btn btn-primary">
+                    Start Scan
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function scansApp() {
+    return {
+        scans: [],
+        filteredScans: [],
+        searchTerm: '',
+        filterType: '',
+        filterStatus: '',
+        sortField: 'started_at',
+        sortDirection: 'desc',
+        currentPage: 1,
+        pageSize: 15,
+        
+        get runningScans() {
+            return this.scans.filter(scan => scan.status === 'running').length;
+        },
+        
+        get recentScans() {
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            return this.scans.filter(scan => 
+                scan.status === 'completed' && new Date(scan.started_at) > yesterday
+            ).length;
+        },
+        
+        get failedScans() {
+            return this.scans.filter(scan => scan.status === 'failed').length;
+        },
+        
+        get currentlyRunning() {
+            return this.scans.filter(scan => scan.status === 'running');
+        },
+        
+        get totalPages() {
+            return Math.ceil(this.filteredScans.length / this.pageSize);
+        },
+        
+        get paginatedScans() {
+            const start = (this.currentPage - 1) * this.pageSize;
+            const end = start + this.pageSize;
+            return this.filteredScans.slice(start, end);
+        },
+        
+        get visiblePages() {
+            const pages = [];
+            const start = Math.max(1, this.currentPage - 2);
+            const end = Math.min(this.totalPages, this.currentPage + 2);
+            
+            for (let i = start; i <= end; i++) {
+                pages.push(i);
+            }
+            return pages;
+        },
+        
+        async init() {
+            await this.loadScans();
+            this.applyFilters();
+            
+            // Auto-refresh every 10 seconds to update running scans
+            setInterval(() => {
+                if (this.runningScans > 0) {
+                    this.loadScans();
+                }
+            }, 10000);
+        },
+        
+        async loadScans() {
+            try {
+                const response = await fetch('/api/scans');
+                const scansData = await response.json();
+                
+                // Transform API data to match UI expectations
+                this.scans = scansData.map(scan => ({
+                    ...scan,
+                    target: scan.target_range,
+                    target_description: `${this.formatScanType(scan.scan_type)} scan`,
+                    devices_found: scan.hosts_scanned,
+                    alerts_generated: 0,
+                    initiated_by: 'System'
+                }));
+                
+                this.applyFilters();
+            } catch (error) {
+                console.error('Error loading scans:', error);
+            }
+        },
+        
+        applyFilters() {
+            let filtered = [...this.scans];
+            
+            // Search filter
+            if (this.searchTerm) {
+                const term = this.searchTerm.toLowerCase();
+                filtered = filtered.filter(scan => 
+                    scan.scan_type.toLowerCase().includes(term) ||
+                    (scan.target || '').toLowerCase().includes(term) ||
+                    (scan.target_description || '').toLowerCase().includes(term) ||
+                    (scan.initiated_by || '').toLowerCase().includes(term)
+                );
+            }
+            
+            // Type filter
+            if (this.filterType) {
+                filtered = filtered.filter(scan => scan.scan_type === this.filterType);
+            }
+            
+            // Status filter
+            if (this.filterStatus) {
+                filtered = filtered.filter(scan => scan.status === this.filterStatus);
+            }
+            
+            // Sort
+            filtered.sort((a, b) => {
+                let aVal = a[this.sortField];
+                let bVal = b[this.sortField];
+                
+                if (this.sortField === 'started_at') {
+                    aVal = new Date(aVal);
+                    bVal = new Date(bVal);
+                }
+                
+                if (aVal < bVal) return this.sortDirection === 'asc' ? -1 : 1;
+                if (aVal > bVal) return this.sortDirection === 'asc' ? 1 : -1;
+                return 0;
+            });
+            
+            this.filteredScans = filtered;
+            this.currentPage = 1;
+        },
+        
+        sortBy(field) {
+            if (this.sortField === field) {
+                this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                this.sortField = field;
+                this.sortDirection = field === 'started_at' ? 'desc' : 'asc';
+            }
+            this.applyFilters();
+        },
+        
+        formatScanType(type) {
+            const types = {
+                discovery: 'Discovery',
+                vulnerability: 'Vulnerability',
+                port: 'Port Scan',
+                targeted: 'Targeted'
+            };
+            return types[type] || type;
+        },
+        
+        formatStatus(status) {
+            return status.charAt(0).toUpperCase() + status.slice(1);
+        },
+        
+        getStatusClass(status) {
+            const classes = {
+                running: 'bg-warning',
+                completed: 'bg-success',
+                failed: 'bg-danger',
+                cancelled: 'bg-secondary'
+            };
+            return classes[status] || 'bg-secondary';
+        },
+        
+        formatTime(timestamp) {
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diff = now - date;
+            
+            if (diff < 60000) return 'Just now';
+            if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+            if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+            return date.toLocaleDateString();
+        },
+        
+        formatDuration(scan) {
+            if (scan.status === 'running') {
+                const elapsed = Date.now() - new Date(scan.started_at);
+                const minutes = Math.floor(elapsed / 60000);
+                return `${minutes}m (running)`;
+            } else if (scan.completed_at) {
+                const duration = new Date(scan.completed_at) - new Date(scan.started_at);
+                const minutes = Math.floor(duration / 60000);
+                const seconds = Math.floor((duration % 60000) / 1000);
+                return `${minutes}m ${seconds}s`;
+            }
+            return '-';
+        },
+        
+        startNewScan() {
+            const modal = new bootstrap.Modal(document.getElementById('newScanModal'));
+            modal.show();
+        },
+        
+        async startScan(config) {
+            try {
+                const response = await fetch('/api/scan/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(config)
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    alert('Scan started successfully');
+                    await this.loadScans();
+                } else {
+                    alert('Failed to start scan: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error starting scan: ' + error.message);
+            }
+        },
+        
+        async cancelScan(scanId) {
+            if (!confirm('Cancel this scan?')) return;
+            
+            try {
+                const response = await fetch(`/api/scans/${scanId}/cancel`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    await this.loadScans();
+                } else {
+                    alert('Failed to cancel scan');
+                }
+            } catch (error) {
+                alert('Error cancelling scan: ' + error.message);
+            }
+        },
+        
+        viewScanDetails(scan) {
+            alert(`Scan Details:\n\nID: ${scan.id}\nType: ${this.formatScanType(scan.scan_type)}\nTarget: ${scan.target || 'Network-wide'}\nStatus: ${this.formatStatus(scan.status)}\nDuration: ${this.formatDuration(scan)}`);
+        },
+        
+        downloadReport(scanId) {
+            // In real implementation, this would download a report
+            alert(`Download report for scan ${scanId} (feature not implemented in mock mode)`);
+        },
+        
+        async repeatScan(scan) {
+            if (!confirm(`Repeat this ${this.formatScanType(scan.scan_type)} scan?`)) return;
+            
+            const config = {
+                scan_type: scan.scan_type,
+                target: scan.target,
+                description: `Repeat of scan #${scan.id}`
+            };
+            
+            await this.startScan(config);
+        },
+        
+        async refresh() {
+            await this.loadScans();
+        }
+    }
+}
+</script>
+{% endblock %}

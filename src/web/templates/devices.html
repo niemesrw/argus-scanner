@@ -1,0 +1,401 @@
+{% extends "base.html" %}
+
+{% block title %}Devices - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div x-data="devicesApp()" x-init="init()">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Network Devices</h1>
+        <div class="d-flex gap-2">
+            <select x-model="filterStatus" @change="applyFilters()" class="form-select" style="width: auto;">
+                <option value="">All Status</option>
+                <option value="active">Active Only</option>
+                <option value="inactive">Inactive Only</option>
+            </select>
+            <select x-model="filterRisk" @change="applyFilters()" class="form-select" style="width: auto;">
+                <option value="">All Risk Levels</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+                <option value="none">None</option>
+            </select>
+            <button @click="refresh()" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+        </div>
+    </div>
+    
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="card stat-card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Total Devices</h6>
+                    <h3 class="mb-0" x-text="devices.length">-</h3>
+                    <small class="text-muted">Discovered</small>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card stat-card success">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Active Devices</h6>
+                    <h3 class="mb-0" x-text="activeDevices">-</h3>
+                    <small class="text-success">Online</small>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card stat-card danger">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">High Risk</h6>
+                    <h3 class="mb-0" x-text="highRiskDevices">-</h3>
+                    <small class="text-danger">Require attention</small>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card stat-card warning">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">With Vulnerabilities</h6>
+                    <h3 class="mb-0" x-text="vulnerableDevices">-</h3>
+                    <small class="text-warning">Need patching</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Devices Table -->
+    <div class="card">
+        <div class="card-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Device List</h5>
+                <div class="d-flex gap-2">
+                    <input 
+                        x-model="searchTerm" 
+                        @input="applyFilters()" 
+                        type="text" 
+                        class="form-control form-control-sm" 
+                        placeholder="Search devices..."
+                        style="width: 200px;">
+                    <span class="badge bg-secondary" x-text="`${filteredDevices.length} devices`"></span>
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th @click="sortBy('hostname')" style="cursor: pointer;">
+                                Device Name 
+                                <i class="bi bi-arrow-up-down ms-1"></i>
+                            </th>
+                            <th @click="sortBy('ip_address')" style="cursor: pointer;">
+                                IP Address
+                                <i class="bi bi-arrow-up-down ms-1"></i>
+                            </th>
+                            <th>OS</th>
+                            <th>Manufacturer</th>
+                            <th @click="sortBy('risk_score')" style="cursor: pointer;">
+                                Risk Score
+                                <i class="bi bi-arrow-up-down ms-1"></i>
+                            </th>
+                            <th>Vulnerabilities</th>
+                            <th>Status</th>
+                            <th @click="sortBy('last_seen')" style="cursor: pointer;">
+                                Last Seen
+                                <i class="bi bi-arrow-up-down ms-1"></i>
+                            </th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="device in paginatedDevices" :key="device.id">
+                            <tr>
+                                <td>
+                                    <div>
+                                        <strong x-text="device.hostname || 'Unknown Device'"></strong>
+                                        <br>
+                                        <small class="text-muted" x-text="device.mac_address"></small>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="font-monospace" x-text="device.ip_address"></span>
+                                </td>
+                                <td>
+                                    <span x-text="device.operating_system || '-'"></span>
+                                </td>
+                                <td>
+                                    <span x-text="device.manufacturer || '-'"></span>
+                                </td>
+                                <td>
+                                    <span 
+                                        :class="getRiskClass(device.risk_score)" 
+                                        class="risk-score" 
+                                        x-text="device.risk_score.toFixed(1)">
+                                    </span>
+                                </td>
+                                <td>
+                                    <span 
+                                        x-show="device.vulnerability_count > 0"
+                                        class="badge bg-danger" 
+                                        x-text="device.vulnerability_count">
+                                    </span>
+                                    <span 
+                                        x-show="device.vulnerability_count === 0"
+                                        class="text-muted">
+                                        None
+                                    </span>
+                                </td>
+                                <td>
+                                    <span 
+                                        :class="device.is_active ? 'badge bg-success' : 'badge bg-secondary'"
+                                        x-text="device.is_active ? 'Active' : 'Inactive'">
+                                    </span>
+                                </td>
+                                <td>
+                                    <span x-text="formatTime(device.last_seen)"></span>
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <button 
+                                            @click="viewDevice(device.id)"
+                                            class="btn btn-outline-primary btn-sm">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                        <button 
+                                            @click="scanDevice(device.id)"
+                                            class="btn btn-outline-secondary btn-sm">
+                                            <i class="bi bi-arrow-repeat"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
+                        <tr x-show="filteredDevices.length === 0">
+                            <td colspan="9" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox display-4 d-block mb-2"></i>
+                                No devices found
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Pagination -->
+            <div x-show="totalPages > 1" class="d-flex justify-content-between align-items-center mt-3">
+                <div>
+                    <span class="text-muted">
+                        Showing <span x-text="((currentPage - 1) * pageSize) + 1"></span> to 
+                        <span x-text="Math.min(currentPage * pageSize, filteredDevices.length)"></span> of 
+                        <span x-text="filteredDevices.length"></span> devices
+                    </span>
+                </div>
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item" :class="{ 'disabled': currentPage === 1 }">
+                            <button @click="currentPage = Math.max(1, currentPage - 1)" class="page-link">Previous</button>
+                        </li>
+                        <template x-for="page in visiblePages" :key="page">
+                            <li class="page-item" :class="{ 'active': page === currentPage }">
+                                <button @click="currentPage = page" class="page-link" x-text="page"></button>
+                            </li>
+                        </template>
+                        <li class="page-item" :class="{ 'disabled': currentPage === totalPages }">
+                            <button @click="currentPage = Math.min(totalPages, currentPage + 1)" class="page-link">Next</button>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function devicesApp() {
+    return {
+        devices: [],
+        filteredDevices: [],
+        searchTerm: '',
+        filterStatus: '',
+        filterRisk: '',
+        sortField: 'hostname',
+        sortDirection: 'asc',
+        currentPage: 1,
+        pageSize: 25,
+        
+        get activeDevices() {
+            return this.devices.filter(d => d.is_active).length;
+        },
+        
+        get highRiskDevices() {
+            return this.devices.filter(d => d.risk_score >= 60).length;
+        },
+        
+        get vulnerableDevices() {
+            return this.devices.filter(d => d.vulnerability_count > 0).length;
+        },
+        
+        get totalPages() {
+            return Math.ceil(this.filteredDevices.length / this.pageSize);
+        },
+        
+        get paginatedDevices() {
+            const start = (this.currentPage - 1) * this.pageSize;
+            const end = start + this.pageSize;
+            return this.filteredDevices.slice(start, end);
+        },
+        
+        get visiblePages() {
+            const pages = [];
+            const start = Math.max(1, this.currentPage - 2);
+            const end = Math.min(this.totalPages, this.currentPage + 2);
+            
+            for (let i = start; i <= end; i++) {
+                pages.push(i);
+            }
+            return pages;
+        },
+        
+        async init() {
+            await this.loadDevices();
+            this.applyFilters();
+        },
+        
+        async loadDevices() {
+            try {
+                const response = await fetch('/api/devices');
+                this.devices = await response.json();
+                this.applyFilters();
+            } catch (error) {
+                console.error('Error loading devices:', error);
+            }
+        },
+        
+        applyFilters() {
+            let filtered = [...this.devices];
+            
+            // Search filter
+            if (this.searchTerm) {
+                const term = this.searchTerm.toLowerCase();
+                filtered = filtered.filter(device => 
+                    (device.hostname || '').toLowerCase().includes(term) ||
+                    device.ip_address.toLowerCase().includes(term) ||
+                    (device.operating_system || '').toLowerCase().includes(term) ||
+                    (device.manufacturer || '').toLowerCase().includes(term) ||
+                    device.mac_address.toLowerCase().includes(term)
+                );
+            }
+            
+            // Status filter
+            if (this.filterStatus) {
+                if (this.filterStatus === 'active') {
+                    filtered = filtered.filter(device => device.is_active);
+                } else if (this.filterStatus === 'inactive') {
+                    filtered = filtered.filter(device => !device.is_active);
+                }
+            }
+            
+            // Risk filter
+            if (this.filterRisk) {
+                filtered = filtered.filter(device => {
+                    const risk = this.getRiskLevel(device.risk_score);
+                    return risk === this.filterRisk;
+                });
+            }
+            
+            // Sort
+            filtered.sort((a, b) => {
+                let aVal = a[this.sortField];
+                let bVal = b[this.sortField];
+                
+                if (this.sortField === 'last_seen') {
+                    aVal = new Date(aVal);
+                    bVal = new Date(bVal);
+                }
+                
+                if (aVal < bVal) return this.sortDirection === 'asc' ? -1 : 1;
+                if (aVal > bVal) return this.sortDirection === 'asc' ? 1 : -1;
+                return 0;
+            });
+            
+            this.filteredDevices = filtered;
+            this.currentPage = 1;
+        },
+        
+        sortBy(field) {
+            if (this.sortField === field) {
+                this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                this.sortField = field;
+                this.sortDirection = 'asc';
+            }
+            this.applyFilters();
+        },
+        
+        getRiskLevel(score) {
+            if (score >= 80) return 'critical';
+            if (score >= 60) return 'high';
+            if (score >= 40) return 'medium';
+            if (score >= 20) return 'low';
+            return 'none';
+        },
+        
+        getRiskClass(score) {
+            return window.getRiskClass(score);
+        },
+        
+        formatTime(timestamp) {
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diff = now - date;
+            
+            if (diff < 60000) return 'Just now';
+            if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+            if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+            return date.toLocaleDateString();
+        },
+        
+        viewDevice(deviceId) {
+            window.location.href = `/devices/${deviceId}`;
+        },
+        
+        async scanDevice(deviceId) {
+            if (!confirm('Start a targeted scan for this device?')) return;
+            
+            try {
+                const response = await fetch('/api/scan/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        scan_type: 'targeted',
+                        target_device_id: deviceId
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    alert('Scan started successfully');
+                    await this.loadDevices();
+                } else {
+                    alert('Scan failed: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error starting scan: ' + error.message);
+            }
+        },
+        
+        async refresh() {
+            await this.loadDevices();
+        }
+    }
+}
+</script>
+{% endblock %}

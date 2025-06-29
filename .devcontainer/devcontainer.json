@@ -1,0 +1,33 @@
+{
+    "name": "Argus Scanner Dev",
+    "dockerComposeFile": [
+        "../docker-compose.yml"
+    ],
+    "service": "argus",
+    "workspaceFolder": "/app",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "ms-python.black-formatter",
+                "ms-azuretools.vscode-docker",
+                "redhat.vscode-yaml",
+                "esbenp.prettier-vscode"
+            ],
+            "settings": {
+                "python.linting.enabled": true,
+                "python.linting.pylintEnabled": false,
+                "python.linting.flake8Enabled": true,
+                "python.formatting.provider": "black",
+                "python.testing.pytestEnabled": true,
+                "editor.formatOnSave": true
+            }
+        }
+    },
+    "features": {
+        "ghcr.io/devcontainers/features/git:1": {}
+    },
+    "postCreateCommand": "pip install -e .",
+    "remoteUser": "root"
+}

@@ -1,0 +1,169 @@
+name: Deploy to Raspberry Pi
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/workflows/ci.yml'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  deploy:
+    name: Deploy to Raspberry Pi
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.PI_SSH_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ secrets.PI_HOST }} >> ~/.ssh/known_hosts
+    
+    - name: Prepare deployment files
+      run: |
+        # Create deployment directory structure
+        mkdir -p deployment/config
+        
+        # Copy necessary files
+        cp docker-compose.yml deployment/
+        cp -r config/* deployment/config/ 2>/dev/null || true
+        
+        # Create production docker-compose override
+        cat > deployment/docker-compose.prod.yml << EOF
+        version: '3.8'
+        
+        services:
+          argus:
+            image: ${REGISTRY}/${IMAGE_NAME}:main
+            environment:
+              - ARGUS_ENV=production
+              - ARGUS_MOCK_MODE=false
+              - ARGUS_NETWORK_RANGE=${{ secrets.PI_NETWORK_RANGE }}
+              - ARGUS_SECRET_KEY=${{ secrets.ARGUS_SECRET_KEY }}
+              - ARGUS_ALERT_EMAIL_ENABLED=${{ secrets.ALERT_EMAIL_ENABLED }}
+              - ARGUS_SMTP_HOST=${{ secrets.SMTP_HOST }}
+              - ARGUS_SMTP_PORT=${{ secrets.SMTP_PORT }}
+              - ARGUS_SMTP_USERNAME=${{ secrets.SMTP_USERNAME }}
+              - ARGUS_SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+              - ARGUS_ALERT_FROM=${{ secrets.ALERT_FROM }}
+              - ARGUS_ALERT_TO=${{ secrets.ALERT_TO }}
+              - ARGUS_SLACK_WEBHOOK=${{ secrets.SLACK_WEBHOOK }}
+            restart: always
+        EOF
+    
+    - name: Copy files to Raspberry Pi
+      run: |
+        scp -r deployment/* ${{ secrets.PI_USERNAME }}@${{ secrets.PI_HOST }}:/home/${{ secrets.PI_USERNAME }}/argus-scanner/
+    
+    - name: Deploy on Raspberry Pi
+      run: |
+        ssh ${{ secrets.PI_USERNAME }}@${{ secrets.PI_HOST }} << 'EOF'
+          cd /home/${{ secrets.PI_USERNAME }}/argus-scanner
+          
+          # Pull latest image
+          docker pull ${REGISTRY}/${IMAGE_NAME}:main
+          
+          # Stop existing containers
+          docker-compose -f docker-compose.yml -f docker-compose.prod.yml down
+          
+          # Start new containers
+          docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+          
+          # Clean up old images
+          docker image prune -f
+          
+          # Check deployment status
+          sleep 10
+          docker-compose -f docker-compose.yml -f docker-compose.prod.yml ps
+          
+          # Check health endpoint
+          curl -f http://localhost:8080/health || exit 1
+        EOF
+    
+    - name: Send deployment notification
+      if: success()
+      run: |
+        if [ -n "${{ secrets.SLACK_WEBHOOK }}" ]; then
+          curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "text": "✅ Argus Scanner deployed successfully to Raspberry Pi",
+              "attachments": [{
+                "color": "good",
+                "fields": [
+                  {"title": "Version", "value": "'${{ github.sha }}'", "short": true},
+                  {"title": "Branch", "value": "'${{ github.ref_name }}'", "short": true},
+                  {"title": "Deployed by", "value": "'${{ github.actor }}'", "short": true}
+                ]
+              }]
+            }'
+        fi
+    
+    - name: Clean up SSH
+      if: always()
+      run: |
+        rm -f ~/.ssh/id_rsa
+
+  rollback:
+    name: Rollback Deployment
+    runs-on: ubuntu-latest
+    if: failure()
+    needs: deploy
+    
+    steps:
+    - name: Set up SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.PI_SSH_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ secrets.PI_HOST }} >> ~/.ssh/known_hosts
+    
+    - name: Rollback on Raspberry Pi
+      run: |
+        ssh ${{ secrets.PI_USERNAME }}@${{ secrets.PI_HOST }} << 'EOF'
+          cd /home/${{ secrets.PI_USERNAME }}/argus-scanner
+          
+          # Get previous image tag
+          PREVIOUS_TAG=$(docker images ${REGISTRY}/${IMAGE_NAME} --format "{{.Tag}}" | grep -v main | head -n 1)
+          
+          if [ -n "$PREVIOUS_TAG" ]; then
+            echo "Rolling back to $PREVIOUS_TAG"
+            
+            # Update docker-compose to use previous tag
+            sed -i "s|image: .*|image: ${REGISTRY}/${IMAGE_NAME}:$PREVIOUS_TAG|" docker-compose.prod.yml
+            
+            # Restart with previous version
+            docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+          else
+            echo "No previous version found for rollback"
+            exit 1
+          fi
+        EOF
+    
+    - name: Send rollback notification
+      if: always()
+      run: |
+        if [ -n "${{ secrets.SLACK_WEBHOOK }}" ]; then
+          curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "text": "⚠️ Argus Scanner deployment failed - attempting rollback",
+              "attachments": [{
+                "color": "warning",
+                "fields": [
+                  {"title": "Failed Version", "value": "'${{ github.sha }}'", "short": true},
+                  {"title": "Action", "value": "Rollback initiated", "short": true}
+                ]
+              }]
+            }'
+        fi

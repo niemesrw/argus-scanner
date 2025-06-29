@@ -1,0 +1,632 @@
+{% extends "base.html" %}
+
+{% block title %}Device Details - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div x-data="deviceDetailApp()" x-init="init()">
+    <!-- Loading State -->
+    <div x-show="loading" class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-3 text-muted">Loading device details...</p>
+    </div>
+    
+    <!-- Error State -->
+    <div x-show="error" class="alert alert-danger" role="alert">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        <span x-text="error"></span>
+        <button @click="window.history.back()" class="btn btn-outline-danger btn-sm ms-3">
+            <i class="bi bi-arrow-left"></i> Go Back
+        </button>
+    </div>
+    
+    <!-- Device Details -->
+    <div x-show="device && !loading && !error">
+        <!-- Header -->
+        <div class="d-flex justify-content-between align-items-start mb-4">
+            <div>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+                        <li class="breadcrumb-item"><a href="/devices">Devices</a></li>
+                        <li class="breadcrumb-item active" x-text="device?.hostname || device?.ip_address"></li>
+                    </ol>
+                </nav>
+                <h1 class="mb-2">
+                    <i class="bi bi-pc-display me-2"></i>
+                    <span x-text="device?.hostname || 'Unknown Device'"></span>
+                </h1>
+                <p class="text-muted mb-0" x-text="device?.ip_address"></p>
+            </div>
+            <div class="text-end">
+                <span 
+                    :class="device?.is_active ? 'badge bg-success' : 'badge bg-secondary'"
+                    x-text="device?.is_active ? 'Active' : 'Inactive'">
+                </span>
+                <div class="mt-2">
+                    <button @click="scanDevice()" class="btn btn-primary btn-sm me-2">
+                        <i class="bi bi-arrow-repeat"></i> Scan Device
+                    </button>
+                    <button @click="editDevice()" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-pencil"></i> Edit
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Device Overview Cards -->
+        <div class="row mb-4">
+            <div class="col-md-3 mb-3">
+                <div class="card stat-card">
+                    <div class="card-body">
+                        <h6 class="text-muted mb-2">Risk Score</h6>
+                        <h3 class="mb-0">
+                            <span 
+                                :class="getRiskClass(device?.risk_score || 0)" 
+                                class="risk-score" 
+                                x-text="(device?.risk_score || 0).toFixed(1)">
+                            </span>
+                        </h3>
+                        <small class="text-muted" x-text="getRiskLevel(device?.risk_score || 0)"></small>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-3 mb-3">
+                <div class="card stat-card">
+                    <div class="card-body">
+                        <h6 class="text-muted mb-2">Open Ports</h6>
+                        <h3 class="mb-0" x-text="openPorts">-</h3>
+                        <small class="text-muted">Services running</small>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-3 mb-3">
+                <div class="card stat-card danger">
+                    <div class="card-body">
+                        <h6 class="text-muted mb-2">Vulnerabilities</h6>
+                        <h3 class="mb-0" x-text="totalVulnerabilities">-</h3>
+                        <small class="text-danger" x-text="criticalVulnerabilities + ' critical'"></small>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-3 mb-3">
+                <div class="card stat-card">
+                    <div class="card-body">
+                        <h6 class="text-muted mb-2">Last Seen</h6>
+                        <h3 class="mb-0" x-text="formatTimeShort(device?.last_seen)">-</h3>
+                        <small class="text-muted" x-text="formatTimeAgo(device?.last_seen)"></small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Device Information -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Device Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <dl class="row">
+                            <dt class="col-4">IP Address:</dt>
+                            <dd class="col-8 font-monospace" x-text="device?.ip_address">-</dd>
+                            
+                            <dt class="col-4">MAC Address:</dt>
+                            <dd class="col-8 font-monospace" x-text="device?.mac_address">-</dd>
+                            
+                            <dt class="col-4">Hostname:</dt>
+                            <dd class="col-8" x-text="device?.hostname || 'Unknown'">-</dd>
+                            
+                            <dt class="col-4">Device Type:</dt>
+                            <dd class="col-8" x-text="device?.device_type || 'Unknown'">-</dd>
+                            
+                            <dt class="col-4">Manufacturer:</dt>
+                            <dd class="col-8" x-text="device?.manufacturer || 'Unknown'">-</dd>
+                            
+                            <dt class="col-4">Operating System:</dt>
+                            <dd class="col-8" x-text="device?.operating_system || 'Unknown'">-</dd>
+                            
+                            <dt class="col-4">OS Version:</dt>
+                            <dd class="col-8" x-text="device?.os_version || 'Unknown'">-</dd>
+                            
+                            <dt class="col-4">First Seen:</dt>
+                            <dd class="col-8" x-text="formatTime(device?.first_seen)">-</dd>
+                            
+                            <dt class="col-4">Last Seen:</dt>
+                            <dd class="col-8" x-text="formatTime(device?.last_seen)">-</dd>
+                        </dl>
+                        
+                        <div x-show="device?.notes" class="mt-3">
+                            <strong>Notes:</strong>
+                            <p class="mt-1" x-text="device?.notes"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Network Activity</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <canvas id="networkChart" width="400" height="200"></canvas>
+                        </div>
+                        <div class="text-center text-muted">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Network activity monitoring in development
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Services and Ports -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="bi bi-diagram-3 me-2"></i>
+                            Services & Ports
+                        </h5>
+                        <span class="badge bg-secondary" x-text="`${device?.services?.length || 0} services`"></span>
+                    </div>
+                    <div class="card-body">
+                        <div x-show="device?.services?.length > 0">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Port</th>
+                                            <th>Protocol</th>
+                                            <th>State</th>
+                                            <th>Service</th>
+                                            <th>Product</th>
+                                            <th>Version</th>
+                                            <th>Vulnerabilities</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="service in device?.services" :key="service.id">
+                                            <tr>
+                                                <td>
+                                                    <span class="font-monospace fw-bold" x-text="service.port"></span>
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-info" x-text="service.protocol?.toUpperCase()"></span>
+                                                </td>
+                                                <td>
+                                                    <span 
+                                                        :class="service.state === 'open' ? 'badge bg-success' : 'badge bg-secondary'"
+                                                        x-text="service.state">
+                                                    </span>
+                                                </td>
+                                                <td x-text="service.service_name || '-'"></td>
+                                                <td x-text="service.product || '-'"></td>
+                                                <td x-text="service.version || '-'"></td>
+                                                <td>
+                                                    <span 
+                                                        x-show="service.vulnerabilities?.length > 0"
+                                                        class="badge bg-danger"
+                                                        x-text="service.vulnerabilities?.length">
+                                                    </span>
+                                                    <span 
+                                                        x-show="!service.vulnerabilities?.length"
+                                                        class="text-muted">
+                                                        None
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <div x-show="!device?.services?.length" class="text-center py-4">
+                            <i class="bi bi-diagram-3 display-4 text-muted mb-3"></i>
+                            <h5>No Services Detected</h5>
+                            <p class="text-muted">
+                                No open ports or services have been discovered on this device.
+                                <br>
+                                Try running a port scan to discover services.
+                            </p>
+                            <button @click="startPortScan()" class="btn btn-primary">
+                                <i class="bi bi-search"></i> Start Port Scan
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Vulnerabilities -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="bi bi-bug me-2"></i>
+                            Security Vulnerabilities
+                        </h5>
+                        <span class="badge bg-danger" x-text="`${totalVulnerabilities} vulnerabilities`"></span>
+                    </div>
+                    <div class="card-body">
+                        <div x-show="allVulnerabilities.length > 0">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Severity</th>
+                                            <th>CVE ID</th>
+                                            <th>Vulnerability</th>
+                                            <th>CVSS Score</th>
+                                            <th>Service</th>
+                                            <th>Exploit</th>
+                                            <th>Discovered</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="vuln in allVulnerabilities" :key="vuln.id">
+                                            <tr>
+                                                <td>
+                                                    <span 
+                                                        :class="getSeverityClass(vuln.severity)"
+                                                        class="badge"
+                                                        x-text="vuln.severity?.toUpperCase()">
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <span class="font-monospace" x-text="vuln.cve_id || '-'"></span>
+                                                </td>
+                                                <td>
+                                                    <strong x-text="vuln.name"></strong>
+                                                    <br>
+                                                    <small class="text-muted" x-text="truncate(vuln.description, 60)"></small>
+                                                </td>
+                                                <td>
+                                                    <span 
+                                                        x-show="vuln.cvss_score"
+                                                        :class="getCvssClass(vuln.cvss_score)"
+                                                        class="badge"
+                                                        x-text="vuln.cvss_score?.toFixed(1)">
+                                                    </span>
+                                                    <span x-show="!vuln.cvss_score" class="text-muted">-</span>
+                                                </td>
+                                                <td>
+                                                    <span x-text="`${vuln.service?.port}/${vuln.service?.name || 'unknown'}`"></span>
+                                                </td>
+                                                <td>
+                                                    <span 
+                                                        x-show="vuln.exploit_available"
+                                                        class="badge bg-warning">
+                                                        Available
+                                                    </span>
+                                                    <span 
+                                                        x-show="!vuln.exploit_available"
+                                                        class="text-muted">
+                                                        None
+                                                    </span>
+                                                </td>
+                                                <td x-text="formatTime(vuln.discovered_at)"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <div x-show="allVulnerabilities.length === 0" class="text-center py-4">
+                            <i class="bi bi-shield-check display-4 text-success mb-3"></i>
+                            <h5>No Vulnerabilities Found</h5>
+                            <p class="text-muted">
+                                No security vulnerabilities have been detected on this device.
+                                <br>
+                                Run a vulnerability scan to check for security issues.
+                            </p>
+                            <button @click="startVulnerabilityScan()" class="btn btn-primary">
+                                <i class="bi bi-shield-exclamation"></i> Start Vulnerability Scan
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recent Activity Timeline -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-clock-history me-2"></i>
+                            Recent Activity
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="timeline">
+                            <div class="timeline-item">
+                                <div class="timeline-marker bg-success"></div>
+                                <div class="timeline-content">
+                                    <h6 class="mb-1">Device Discovered</h6>
+                                    <p class="text-muted mb-0" x-text="'First seen on ' + formatTime(device?.first_seen)"></p>
+                                </div>
+                            </div>
+                            <div class="timeline-item">
+                                <div class="timeline-marker bg-info"></div>
+                                <div class="timeline-content">
+                                    <h6 class="mb-1">Last Network Activity</h6>
+                                    <p class="text-muted mb-0" x-text="'Active on ' + formatTime(device?.last_seen)"></p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="text-center mt-3">
+                            <small class="text-muted">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Activity logging in development - more details will be available in production
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+.timeline {
+    position: relative;
+    padding-left: 30px;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #dee2e6;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 20px;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: -22px;
+    top: 5px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 3px solid white;
+    box-shadow: 0 0 0 2px #dee2e6;
+}
+
+.timeline-content {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 3px solid #007bff;
+}
+</style>
+
+<script>
+function deviceDetailApp() {
+    return {
+        deviceId: {{ device_id }},
+        device: null,
+        loading: true,
+        error: null,
+        
+        get openPorts() {
+            return this.device?.services?.filter(s => s.state === 'open').length || 0;
+        },
+        
+        get allVulnerabilities() {
+            if (!this.device?.services) return [];
+            return this.device.services.flatMap(service => 
+                (service.vulnerabilities || []).map(vuln => ({
+                    ...vuln,
+                    service: { port: service.port, name: service.service_name }
+                }))
+            );
+        },
+        
+        get totalVulnerabilities() {
+            return this.allVulnerabilities.length;
+        },
+        
+        get criticalVulnerabilities() {
+            return this.allVulnerabilities.filter(v => v.severity === 'critical').length;
+        },
+        
+        async init() {
+            await this.loadDevice();
+        },
+        
+        async loadDevice() {
+            this.loading = true;
+            this.error = null;
+            
+            try {
+                const response = await fetch(`/api/devices/${this.deviceId}`);
+                
+                if (response.status === 404) {
+                    this.error = 'Device not found';
+                    return;
+                }
+                
+                if (!response.ok) {
+                    throw new Error('Failed to load device details');
+                }
+                
+                this.device = await response.json();
+            } catch (error) {
+                console.error('Error loading device:', error);
+                this.error = 'Failed to load device details: ' + error.message;
+            } finally {
+                this.loading = false;
+            }
+        },
+        
+        getRiskLevel(score) {
+            if (score >= 80) return 'Critical Risk';
+            if (score >= 60) return 'High Risk';
+            if (score >= 40) return 'Medium Risk';
+            if (score >= 20) return 'Low Risk';
+            return 'No Risk';
+        },
+        
+        getRiskClass(score) {
+            return window.getRiskClass(score);
+        },
+        
+        getSeverityClass(severity) {
+            const classes = {
+                critical: 'bg-danger',
+                high: 'bg-warning',
+                medium: 'bg-info',
+                low: 'bg-primary',
+                info: 'bg-secondary'
+            };
+            return classes[severity] || 'bg-secondary';
+        },
+        
+        getCvssClass(score) {
+            if (score >= 9.0) return 'bg-danger';
+            if (score >= 7.0) return 'bg-warning';
+            if (score >= 4.0) return 'bg-info';
+            return 'bg-secondary';
+        },
+        
+        formatTime(timestamp) {
+            if (!timestamp) return '-';
+            return new Date(timestamp).toLocaleString();
+        },
+        
+        formatTimeShort(timestamp) {
+            if (!timestamp) return '-';
+            return new Date(timestamp).toLocaleDateString();
+        },
+        
+        formatTimeAgo(timestamp) {
+            if (!timestamp) return '';
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diff = now - date;
+            
+            if (diff < 60000) return 'Just now';
+            if (diff < 3600000) return `${Math.floor(diff / 60000)} minutes ago`;
+            if (diff < 86400000) return `${Math.floor(diff / 3600000)} hours ago`;
+            const days = Math.floor(diff / 86400000);
+            return `${days} day${days > 1 ? 's' : ''} ago`;
+        },
+        
+        truncate(text, length) {
+            if (!text) return '';
+            return text.length > length ? text.substring(0, length) + '...' : text;
+        },
+        
+        async scanDevice() {
+            if (!confirm('Start a comprehensive scan of this device?')) return;
+            
+            try {
+                const response = await fetch('/api/scan/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        scan_type: 'targeted',
+                        target: this.device.ip_address,
+                        description: `Targeted scan of ${this.device.hostname || this.device.ip_address}`
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    alert('Device scan started successfully');
+                    await this.loadDevice();
+                } else {
+                    alert('Failed to start scan: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error starting scan: ' + error.message);
+            }
+        },
+        
+        async startPortScan() {
+            if (!confirm('Start a port scan to discover services on this device?')) return;
+            
+            try {
+                const response = await fetch('/api/scan/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        scan_type: 'port',
+                        target: this.device.ip_address,
+                        description: `Port scan of ${this.device.hostname || this.device.ip_address}`
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    alert('Port scan started successfully');
+                } else {
+                    alert('Failed to start port scan: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error starting port scan: ' + error.message);
+            }
+        },
+        
+        async startVulnerabilityScan() {
+            if (!confirm('Start a vulnerability scan on this device? This may take several minutes.')) return;
+            
+            try {
+                const response = await fetch('/api/scan/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        scan_type: 'vulnerability',
+                        target: this.device.ip_address,
+                        description: `Vulnerability scan of ${this.device.hostname || this.device.ip_address}`
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    alert('Vulnerability scan started successfully');
+                } else {
+                    alert('Failed to start vulnerability scan: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error starting vulnerability scan: ' + error.message);
+            }
+        },
+        
+        editDevice() {
+            alert('Device editing functionality will be available in a future update');
+        }
+    }
+}
+</script>
+{% endblock %}

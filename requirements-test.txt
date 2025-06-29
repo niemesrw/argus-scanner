@@ -1,0 +1,11 @@
+# Testing dependencies for Argus Scanner
+pytest>=7.4.3
+pytest-playwright>=0.4.3
+playwright>=1.40.0
+requests>=2.31.0
+
+# Optional: for parallel test execution
+pytest-xdist>=3.3.1
+
+# Optional: for test coverage
+pytest-cov>=4.1.0

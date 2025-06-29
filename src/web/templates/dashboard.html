@@ -1,0 +1,300 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div x-data="dashboardApp()" x-init="init()">
+    <h1 class="mb-4">Network Security Dashboard</h1>
+    
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="card stat-card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Total Devices</h6>
+                    <h3 class="mb-0" x-text="stats.total_devices">-</h3>
+                    <small class="text-muted">
+                        <span x-text="stats.active_devices">-</span> active
+                    </small>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card stat-card danger">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Vulnerabilities</h6>
+                    <h3 class="mb-0" x-text="stats.total_vulnerabilities">-</h3>
+                    <small class="text-danger">
+                        <span x-text="stats.critical_vulnerabilities">-</span> critical
+                    </small>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card stat-card warning">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Unresolved Alerts</h6>
+                    <h3 class="mb-0" x-text="stats.unacknowledged_alerts">-</h3>
+                    <small class="text-muted">Require attention</small>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card stat-card success">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Recent Scans</h6>
+                    <h3 class="mb-0" x-text="stats.recent_scans">-</h3>
+                    <small class="text-muted">Last 24 hours</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Risk Distribution Chart -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Risk Distribution</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="riskChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Recent Alerts</h5>
+                </div>
+                <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                    <div class="list-group list-group-flush">
+                        <template x-for="alert in recentAlerts" :key="alert.id">
+                            <div class="list-group-item px-0">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <span :class="getSeverityClass(alert.severity)" x-text="alert.severity.toUpperCase()"></span>
+                                        <h6 class="mb-1" x-text="alert.title"></h6>
+                                        <small class="text-muted" x-text="formatTime(alert.created_at)"></small>
+                                    </div>
+                                    <button 
+                                        x-show="!alert.acknowledged" 
+                                        @click="acknowledgeAlert(alert.id)"
+                                        class="btn btn-sm btn-outline-primary">
+                                        Acknowledge
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                        <div x-show="recentAlerts.length === 0" class="text-center text-muted py-3">
+                            No recent alerts
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- High Risk Devices -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">High Risk Devices</h5>
+                    <a href="/devices" class="btn btn-sm btn-primary">View All</a>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Device</th>
+                                    <th>IP Address</th>
+                                    <th>OS</th>
+                                    <th>Risk Score</th>
+                                    <th>Vulnerabilities</th>
+                                    <th>Last Seen</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="device in highRiskDevices" :key="device.id">
+                                    <tr style="cursor: pointer;" @click="window.location.href = `/devices/${device.id}`">
+                                        <td>
+                                            <strong x-text="device.hostname || 'Unknown'"></strong><br>
+                                            <small class="text-muted" x-text="device.mac_address"></small>
+                                        </td>
+                                        <td x-text="device.ip_address"></td>
+                                        <td x-text="device.operating_system || '-'"></td>
+                                        <td>
+                                            <span :class="getRiskClass(device.risk_score)" class="risk-score" x-text="device.risk_score.toFixed(1)"></span>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-danger" x-text="device.vulnerability_count"></span>
+                                        </td>
+                                        <td x-text="formatTime(device.last_seen)"></td>
+                                    </tr>
+                                </template>
+                                <tr x-show="highRiskDevices.length === 0">
+                                    <td colspan="6" class="text-center text-muted">No high risk devices found</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+function dashboardApp() {
+    return {
+        stats: {
+            total_devices: 0,
+            active_devices: 0,
+            total_vulnerabilities: 0,
+            critical_vulnerabilities: 0,
+            unacknowledged_alerts: 0,
+            recent_scans: 0,
+            risk_distribution: {}
+        },
+        recentAlerts: [],
+        highRiskDevices: [],
+        riskChart: null,
+        
+        async init() {
+            await this.loadStats();
+            await this.loadRecentAlerts();
+            await this.loadHighRiskDevices();
+            this.createRiskChart();
+            
+            // Refresh data every 30 seconds
+            setInterval(() => {
+                this.loadStats();
+                this.loadRecentAlerts();
+                this.loadHighRiskDevices();
+            }, 30000);
+        },
+        
+        async loadStats() {
+            try {
+                const response = await fetch('/api/stats');
+                this.stats = await response.json();
+                this.updateRiskChart();
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        },
+        
+        async loadRecentAlerts() {
+            try {
+                const response = await fetch('/api/alerts?limit=5&acknowledged=false');
+                this.recentAlerts = await response.json();
+            } catch (error) {
+                console.error('Error loading alerts:', error);
+            }
+        },
+        
+        async loadHighRiskDevices() {
+            try {
+                const response = await fetch('/api/devices?active_only=true&sort_by=risk_score&order=desc');
+                const devices = await response.json();
+                this.highRiskDevices = devices.filter(d => d.risk_score >= 60).slice(0, 5);
+            } catch (error) {
+                console.error('Error loading devices:', error);
+            }
+        },
+        
+        createRiskChart() {
+            const ctx = document.getElementById('riskChart').getContext('2d');
+            this.riskChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Critical', 'High', 'Medium', 'Low', 'None'],
+                    datasets: [{
+                        data: [0, 0, 0, 0, 0],
+                        backgroundColor: [
+                            '#e74c3c',
+                            '#e67e22',
+                            '#f39c12',
+                            '#3498db',
+                            '#95a5a6'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right'
+                        }
+                    }
+                }
+            });
+        },
+        
+        updateRiskChart() {
+            if (this.riskChart && this.stats.risk_distribution) {
+                const data = [
+                    this.stats.risk_distribution.Critical || 0,
+                    this.stats.risk_distribution.High || 0,
+                    this.stats.risk_distribution.Medium || 0,
+                    this.stats.risk_distribution.Low || 0,
+                    this.stats.risk_distribution.None || 0
+                ];
+                this.riskChart.data.datasets[0].data = data;
+                this.riskChart.update();
+            }
+        },
+        
+        async acknowledgeAlert(alertId) {
+            try {
+                const response = await fetch(`/api/alerts/${alertId}/acknowledge`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        acknowledged_by: 'dashboard_user'
+                    })
+                });
+                
+                if (response.ok) {
+                    await this.loadRecentAlerts();
+                    await updateAlertCount();
+                }
+            } catch (error) {
+                console.error('Error acknowledging alert:', error);
+            }
+        },
+        
+        formatTime(timestamp) {
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diff = now - date;
+            
+            if (diff < 60000) return 'Just now';
+            if (diff < 3600000) return `${Math.floor(diff / 60000)} minutes ago`;
+            if (diff < 86400000) return `${Math.floor(diff / 3600000)} hours ago`;
+            return date.toLocaleDateString();
+        },
+        
+        getRiskClass(score) {
+            return window.getRiskClass(score);
+        },
+        
+        getSeverityClass(severity) {
+            return window.getSeverityClass(severity);
+        }
+    }
+}
+</script>
+{% endblock %}

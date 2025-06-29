@@ -1,0 +1,630 @@
+{% extends "base.html" %}
+
+{% block title %}Alerts - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div x-data="alertsApp()" x-init="init()">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Security Alerts</h1>
+        <div class="d-flex gap-2">
+            <select x-model="filterSeverity" @change="applyFilters()" class="form-select" style="width: auto;">
+                <option value="">All Severities</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+                <option value="info">Info</option>
+            </select>
+            <select x-model="filterStatus" @change="applyFilters()" class="form-select" style="width: auto;">
+                <option value="">All Status</option>
+                <option value="unacknowledged">Unacknowledged</option>
+                <option value="acknowledged">Acknowledged</option>
+                <option value="resolved">Resolved</option>
+            </select>
+            <button @click="refresh()" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+        </div>
+    </div>
+    
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="card stat-card danger">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Critical Alerts</h6>
+                    <h3 class="mb-0" x-text="severityCounts.critical || 0">-</h3>
+                    <small class="text-danger">Immediate attention</small>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card stat-card warning">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Unacknowledged</h6>
+                    <h3 class="mb-0" x-text="unacknowledgedCount">-</h3>
+                    <small class="text-warning">Require action</small>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card stat-card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Last 24 Hours</h6>
+                    <h3 class="mb-0" x-text="recentCount">-</h3>
+                    <small class="text-muted">New alerts</small>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3 mb-3">
+            <div class="card stat-card success">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Total Alerts</h6>
+                    <h3 class="mb-0" x-text="alerts.length">-</h3>
+                    <small class="text-muted">All time</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Mock Mode Notice -->
+    <div x-show="alerts.length === 0" class="alert alert-success mb-4">
+        <i class="bi bi-check-circle me-2"></i>
+        <strong>All Clear:</strong> No security alerts detected. In production mode, this page would display 
+        security alerts from monitoring systems, intrusion detection, and vulnerability scanners.
+    </div>
+    
+    <!-- Alerts List -->
+    <div class="card">
+        <div class="card-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Alert List</h5>
+                <div class="d-flex gap-2">
+                    <input 
+                        x-model="searchTerm" 
+                        @input="applyFilters()" 
+                        type="text" 
+                        class="form-control form-control-sm" 
+                        placeholder="Search alerts..."
+                        style="width: 200px;">
+                    <span class="badge bg-secondary" x-text="`${filteredAlerts.length} alerts`"></span>
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            <div x-show="alerts.length > 0">
+                <!-- Bulk Actions -->
+                <div x-show="selectedAlerts.length > 0" class="mb-3 p-3 bg-light rounded">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span x-text="`${selectedAlerts.length} alert(s) selected`"></span>
+                        <div class="btn-group btn-group-sm">
+                            <button @click="bulkAcknowledge()" class="btn btn-outline-primary">
+                                <i class="bi bi-check"></i> Acknowledge Selected
+                            </button>
+                            <button @click="bulkResolve()" class="btn btn-outline-success">
+                                <i class="bi bi-check-circle"></i> Resolve Selected
+                            </button>
+                            <button @click="clearSelection()" class="btn btn-outline-secondary">
+                                Clear Selection
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th style="width: 40px;">
+                                    <input 
+                                        type="checkbox" 
+                                        @change="toggleSelectAll($event)"
+                                        :checked="selectedAlerts.length === filteredAlerts.length && filteredAlerts.length > 0"
+                                        class="form-check-input">
+                                </th>
+                                <th @click="sortBy('severity')" style="cursor: pointer;">
+                                    Severity
+                                    <i class="bi bi-arrow-up-down ms-1"></i>
+                                </th>
+                                <th @click="sortBy('title')" style="cursor: pointer;">
+                                    Alert
+                                    <i class="bi bi-arrow-up-down ms-1"></i>
+                                </th>
+                                <th>Source</th>
+                                <th>Affected Device</th>
+                                <th>Status</th>
+                                <th @click="sortBy('created_at')" style="cursor: pointer;">
+                                    Created
+                                    <i class="bi bi-arrow-up-down ms-1"></i>
+                                </th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="alert in paginatedAlerts" :key="alert.id">
+                                <tr :class="{ 'table-warning': !alert.acknowledged && alert.severity === 'critical' }">
+                                    <td>
+                                        <input 
+                                            type="checkbox" 
+                                            :value="alert.id"
+                                            @change="toggleSelection(alert.id, $event)"
+                                            class="form-check-input">
+                                    </td>
+                                    <td>
+                                        <span 
+                                            :class="getSeverityClass(alert.severity)"
+                                            class="badge"
+                                            x-text="alert.severity.toUpperCase()">
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div>
+                                            <strong x-text="alert.title"></strong>
+                                            <br>
+                                            <small class="text-muted" x-text="truncate(alert.description, 80)"></small>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span x-text="alert.source || 'System'"></span>
+                                    </td>
+                                    <td>
+                                        <span x-show="alert.device_id">
+                                            <a :href="`/devices/${alert.device_id}`" class="text-decoration-none">
+                                                <span x-text="alert.device_name || alert.device_ip"></span>
+                                            </a>
+                                        </span>
+                                        <span x-show="!alert.device_id" class="text-muted">-</span>
+                                    </td>
+                                    <td>
+                                        <span 
+                                            :class="getStatusClass(alert)"
+                                            class="badge"
+                                            x-text="getStatusText(alert)">
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span x-text="formatTime(alert.created_at)"></span>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <button 
+                                                @click="viewAlert(alert)"
+                                                class="btn btn-outline-primary btn-sm">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+                                            <button 
+                                                x-show="!alert.acknowledged"
+                                                @click="acknowledgeAlert(alert.id)"
+                                                class="btn btn-outline-warning btn-sm">
+                                                <i class="bi bi-check"></i>
+                                            </button>
+                                            <button 
+                                                x-show="alert.acknowledged && !alert.resolved"
+                                                @click="resolveAlert(alert.id)"
+                                                class="btn btn-outline-success btn-sm">
+                                                <i class="bi bi-check-circle"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Pagination -->
+                <div x-show="totalPages > 1" class="d-flex justify-content-between align-items-center mt-3">
+                    <div>
+                        <span class="text-muted">
+                            Showing <span x-text="((currentPage - 1) * pageSize) + 1"></span> to 
+                            <span x-text="Math.min(currentPage * pageSize, filteredAlerts.length)"></span> of 
+                            <span x-text="filteredAlerts.length"></span> alerts
+                        </span>
+                    </div>
+                    <nav>
+                        <ul class="pagination pagination-sm mb-0">
+                            <li class="page-item" :class="{ 'disabled': currentPage === 1 }">
+                                <button @click="currentPage = Math.max(1, currentPage - 1)" class="page-link">Previous</button>
+                            </li>
+                            <template x-for="page in visiblePages" :key="page">
+                                <li class="page-item" :class="{ 'active': page === currentPage }">
+                                    <button @click="currentPage = page" class="page-link" x-text="page"></button>
+                                </li>
+                            </template>
+                            <li class="page-item" :class="{ 'disabled': currentPage === totalPages }">
+                                <button @click="currentPage = Math.min(totalPages, currentPage + 1)" class="page-link">Next</button>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+            
+            <!-- Empty state -->
+            <div x-show="alerts.length === 0" class="text-center py-5">
+                <i class="bi bi-check-circle-fill display-4 text-success mb-3"></i>
+                <h4>No Security Alerts</h4>
+                <p class="text-muted">
+                    Excellent! No security alerts have been detected.
+                    <br>
+                    Your network monitoring systems are running normally.
+                </p>
+                <div class="mt-4">
+                    <button @click="refresh()" class="btn btn-primary me-2">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh Alerts
+                    </button>
+                    <button @click="testAlert()" class="btn btn-outline-secondary">
+                        <i class="bi bi-plus-circle"></i> Create Test Alert
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Alert Detail Modal -->
+<div class="modal fade" id="alertModal" tabindex="-1" x-data="{ alertDetail: null }">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Alert Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" x-show="alertDetail">
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Severity:</strong>
+                        <span 
+                            :class="getSeverityClass(alertDetail?.severity)"
+                            class="badge ms-2"
+                            x-text="alertDetail?.severity?.toUpperCase()">
+                        </span>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Status:</strong>
+                        <span 
+                            :class="getStatusClass(alertDetail)"
+                            class="badge ms-2"
+                            x-text="getStatusText(alertDetail)">
+                        </span>
+                    </div>
+                </div>
+                <hr>
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Source:</strong> <span x-text="alertDetail?.source || 'System'"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Created:</strong> <span x-text="formatFullTime(alertDetail?.created_at)"></span>
+                    </div>
+                </div>
+                <hr>
+                <div x-show="alertDetail?.device_id">
+                    <strong>Affected Device:</strong>
+                    <a :href="`/devices/${alertDetail?.device_id}`" class="text-decoration-none">
+                        <span x-text="alertDetail?.device_name || alertDetail?.device_ip"></span>
+                    </a>
+                    <hr>
+                </div>
+                <div>
+                    <strong>Description:</strong>
+                    <p x-text="alertDetail?.description" class="mt-2"></p>
+                </div>
+                <div x-show="alertDetail?.details">
+                    <strong>Technical Details:</strong>
+                    <pre x-text="alertDetail?.details" class="mt-2 p-3 bg-light rounded small"></pre>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button 
+                    x-show="alertDetail && !alertDetail.acknowledged"
+                    @click="acknowledgeAlert(alertDetail.id); bootstrap.Modal.getInstance(document.getElementById('alertModal')).hide()"
+                    class="btn btn-warning">
+                    Acknowledge
+                </button>
+                <button 
+                    x-show="alertDetail && alertDetail.acknowledged && !alertDetail.resolved"
+                    @click="resolveAlert(alertDetail.id); bootstrap.Modal.getInstance(document.getElementById('alertModal')).hide()"
+                    class="btn btn-success">
+                    Resolve
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function alertsApp() {
+    return {
+        alerts: [],
+        filteredAlerts: [],
+        selectedAlerts: [],
+        searchTerm: '',
+        filterSeverity: '',
+        filterStatus: '',
+        sortField: 'created_at',
+        sortDirection: 'desc',
+        currentPage: 1,
+        pageSize: 20,
+        
+        get severityCounts() {
+            const counts = {};
+            this.alerts.forEach(alert => {
+                counts[alert.severity] = (counts[alert.severity] || 0) + 1;
+            });
+            return counts;
+        },
+        
+        get unacknowledgedCount() {
+            return this.alerts.filter(alert => !alert.acknowledged).length;
+        },
+        
+        get recentCount() {
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            return this.alerts.filter(alert => new Date(alert.created_at) > yesterday).length;
+        },
+        
+        get totalPages() {
+            return Math.ceil(this.filteredAlerts.length / this.pageSize);
+        },
+        
+        get paginatedAlerts() {
+            const start = (this.currentPage - 1) * this.pageSize;
+            const end = start + this.pageSize;
+            return this.filteredAlerts.slice(start, end);
+        },
+        
+        get visiblePages() {
+            const pages = [];
+            const start = Math.max(1, this.currentPage - 2);
+            const end = Math.min(this.totalPages, this.currentPage + 2);
+            
+            for (let i = start; i <= end; i++) {
+                pages.push(i);
+            }
+            return pages;
+        },
+        
+        async init() {
+            await this.loadAlerts();
+            this.applyFilters();
+        },
+        
+        async loadAlerts() {
+            try {
+                const response = await fetch('/api/alerts');
+                this.alerts = await response.json();
+                this.applyFilters();
+            } catch (error) {
+                console.error('Error loading alerts:', error);
+            }
+        },
+        
+        applyFilters() {
+            let filtered = [...this.alerts];
+            
+            // Search filter
+            if (this.searchTerm) {
+                const term = this.searchTerm.toLowerCase();
+                filtered = filtered.filter(alert => 
+                    alert.title.toLowerCase().includes(term) ||
+                    (alert.description || '').toLowerCase().includes(term) ||
+                    (alert.source || '').toLowerCase().includes(term) ||
+                    (alert.device_name || '').toLowerCase().includes(term)
+                );
+            }
+            
+            // Severity filter
+            if (this.filterSeverity) {
+                filtered = filtered.filter(alert => alert.severity === this.filterSeverity);
+            }
+            
+            // Status filter
+            if (this.filterStatus) {
+                if (this.filterStatus === 'unacknowledged') {
+                    filtered = filtered.filter(alert => !alert.acknowledged);
+                } else if (this.filterStatus === 'acknowledged') {
+                    filtered = filtered.filter(alert => alert.acknowledged && !alert.resolved);
+                } else if (this.filterStatus === 'resolved') {
+                    filtered = filtered.filter(alert => alert.resolved);
+                }
+            }
+            
+            // Sort
+            filtered.sort((a, b) => {
+                let aVal = a[this.sortField];
+                let bVal = b[this.sortField];
+                
+                if (this.sortField === 'severity') {
+                    const severityOrder = { critical: 4, high: 3, medium: 2, low: 1, info: 0 };
+                    aVal = severityOrder[aVal] || 0;
+                    bVal = severityOrder[bVal] || 0;
+                } else if (this.sortField === 'created_at') {
+                    aVal = new Date(aVal);
+                    bVal = new Date(bVal);
+                }
+                
+                if (aVal < bVal) return this.sortDirection === 'asc' ? -1 : 1;
+                if (aVal > bVal) return this.sortDirection === 'asc' ? 1 : -1;
+                return 0;
+            });
+            
+            this.filteredAlerts = filtered;
+            this.currentPage = 1;
+            this.selectedAlerts = [];
+        },
+        
+        sortBy(field) {
+            if (this.sortField === field) {
+                this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                this.sortField = field;
+                this.sortDirection = field === 'created_at' ? 'desc' : 'asc';
+            }
+            this.applyFilters();
+        },
+        
+        toggleSelection(alertId, event) {
+            if (event.target.checked) {
+                this.selectedAlerts.push(alertId);
+            } else {
+                this.selectedAlerts = this.selectedAlerts.filter(id => id !== alertId);
+            }
+        },
+        
+        toggleSelectAll(event) {
+            if (event.target.checked) {
+                this.selectedAlerts = this.filteredAlerts.map(alert => alert.id);
+            } else {
+                this.selectedAlerts = [];
+            }
+        },
+        
+        clearSelection() {
+            this.selectedAlerts = [];
+        },
+        
+        getSeverityClass(severity) {
+            const classes = {
+                critical: 'bg-danger',
+                high: 'bg-warning',
+                medium: 'bg-info',
+                low: 'bg-primary',
+                info: 'bg-secondary'
+            };
+            return classes[severity] || 'bg-secondary';
+        },
+        
+        getStatusClass(alert) {
+            if (alert.resolved) return 'bg-success';
+            if (alert.acknowledged) return 'bg-warning';
+            return 'bg-danger';
+        },
+        
+        getStatusText(alert) {
+            if (alert.resolved) return 'Resolved';
+            if (alert.acknowledged) return 'Acknowledged';
+            return 'New';
+        },
+        
+        formatTime(timestamp) {
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diff = now - date;
+            
+            if (diff < 60000) return 'Just now';
+            if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+            if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+            return date.toLocaleDateString();
+        },
+        
+        formatFullTime(timestamp) {
+            return new Date(timestamp).toLocaleString();
+        },
+        
+        truncate(text, length) {
+            if (!text) return '';
+            return text.length > length ? text.substring(0, length) + '...' : text;
+        },
+        
+        viewAlert(alert) {
+            // Set alert detail and show modal
+            Alpine.store('alertDetail', alert);
+            const modal = new bootstrap.Modal(document.getElementById('alertModal'));
+            modal.show();
+        },
+        
+        async acknowledgeAlert(alertId) {
+            try {
+                const response = await fetch(`/api/alerts/${alertId}/acknowledge`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        acknowledged_by: 'dashboard_user'
+                    })
+                });
+                
+                if (response.ok) {
+                    await this.loadAlerts();
+                    this.selectedAlerts = this.selectedAlerts.filter(id => id !== alertId);
+                } else {
+                    alert('Failed to acknowledge alert');
+                }
+            } catch (error) {
+                alert('Error acknowledging alert: ' + error.message);
+            }
+        },
+        
+        async resolveAlert(alertId) {
+            try {
+                const response = await fetch(`/api/alerts/${alertId}/resolve`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        resolved_by: 'dashboard_user'
+                    })
+                });
+                
+                if (response.ok) {
+                    await this.loadAlerts();
+                    this.selectedAlerts = this.selectedAlerts.filter(id => id !== alertId);
+                } else {
+                    alert('Failed to resolve alert');
+                }
+            } catch (error) {
+                alert('Error resolving alert: ' + error.message);
+            }
+        },
+        
+        async bulkAcknowledge() {
+            if (!confirm(`Acknowledge ${this.selectedAlerts.length} selected alerts?`)) return;
+            
+            for (const alertId of this.selectedAlerts) {
+                await this.acknowledgeAlert(alertId);
+            }
+        },
+        
+        async bulkResolve() {
+            if (!confirm(`Resolve ${this.selectedAlerts.length} selected alerts?`)) return;
+            
+            for (const alertId of this.selectedAlerts) {
+                await this.resolveAlert(alertId);
+            }
+        },
+        
+        async testAlert() {
+            if (!confirm('Create a test alert for demonstration purposes?')) return;
+            
+            try {
+                const response = await fetch('/api/alerts/test', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    await this.loadAlerts();
+                } else {
+                    alert('Failed to create test alert');
+                }
+            } catch (error) {
+                alert('Error creating test alert: ' + error.message);
+            }
+        },
+        
+        async refresh() {
+            await this.loadAlerts();
+        }
+    }
+}
+</script>
+{% endblock %}
