@@ -1,6 +1,6 @@
 # Core dependencies
 flask==3.0.0
-flask-cors==4.0.0
+flask-cors==6.0.0
 flask-sqlalchemy==3.1.1
 flask-migrate==4.0.5
 sqlalchemy==2.0.23
@@ -11,7 +11,7 @@ scapy==2.5.0
 netifaces==0.11.0
 
 # Vulnerability detection
-requests==2.31.0
+requests==2.32.4
 beautifulsoup4==4.12.2
 
 # Scheduling and async
@@ -25,9 +25,9 @@ emails==0.6
 slack-sdk==3.26.1
 
 # Security and validation
-cryptography==41.0.7
+cryptography==44.0.1
 pydantic==2.5.2
-python-jose==3.3.0
+python-jose==3.4.0
 
 # Logging and monitoring
 python-json-logger==2.0.7
