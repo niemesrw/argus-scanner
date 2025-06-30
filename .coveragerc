@@ -1,0 +1,55 @@
+[run]
+source = src
+branch = True
+parallel = True
+omit = 
+    */tests/*
+    */test_*
+    */__pycache__/*
+    */venv/*
+    */env/*
+    */.venv/*
+    */migrations/*
+    */conftest.py
+    */setup.py
+
+[report]
+precision = 2
+show_missing = True
+skip_covered = False
+sort = Cover
+exclude_lines =
+    # Standard pragma
+    pragma: no cover
+    
+    # Debug-only code
+    def __repr__
+    if self\.debug
+    
+    # Defensive programming
+    raise AssertionError
+    raise NotImplementedError
+    
+    # Non-runnable code
+    if 0:
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @abstract
+    
+    # Difficult to test
+    except ImportError:
+    except KeyError:
+    pass
+
+[html]
+directory = htmlcov
+title = Argus Scanner Coverage Report
+show_contexts = True
+
+[xml]
+output = coverage.xml
+
+[json]
+output = coverage.json
+pretty_print = True
+show_contexts = True
