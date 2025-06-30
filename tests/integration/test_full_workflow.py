@@ -11,7 +11,7 @@ from src.scanner.discovery import NetworkDiscovery
 from src.scanner.vulnerability import VulnerabilityScanner
 from src.scheduler.tasks import SchedulerService
 from src.alerts.manager import AlertManager
-from src.database.models import Device, Vulnerability, Alert, Scan
+from src.database.models import Device, Vulnerability, Alert, Scan, ScanResult
 from src.config.settings import Settings
 
 
