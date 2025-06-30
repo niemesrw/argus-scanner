@@ -37,3 +37,4 @@ def setup_logging(log_level: str, log_path: Path) -> None:
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("werkzeug").setLevel(logging.WARNING)
+    logging.getLogger("watchdog").setLevel(logging.WARNING)

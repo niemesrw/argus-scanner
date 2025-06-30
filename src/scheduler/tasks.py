@@ -71,8 +71,8 @@ class SchedulerService:
         
         self.scheduler.start()
         
-        # Run initial discovery
-        self.run_network_discovery()
+        # Don't run initial discovery - wait for scheduled time
+        logger.info("Scheduler started. First scan will run according to schedule.")
         
     def stop(self):
         """Stop the scheduler"""

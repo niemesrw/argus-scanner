@@ -87,9 +87,18 @@ class TestAPI:
         assert response.status_code == 200
         data = response.json()
         
-        # Should be a list (empty in mock mode)
+        # Should be a list
         assert isinstance(data, list)
-        assert len(data) == 0  # Mock mode should have no vulnerabilities
+        
+        # If vulnerabilities exist, validate their structure
+        if len(data) > 0:
+            vuln = data[0]
+            assert "id" in vuln
+            assert "cve_id" in vuln
+            assert "name" in vuln
+            assert "severity" in vuln
+            assert "device" in vuln
+            assert "service" in vuln
     
     def test_api_alerts_endpoint(self):
         """Test /api/alerts endpoint"""
@@ -98,9 +107,18 @@ class TestAPI:
         assert response.status_code == 200
         data = response.json()
         
-        # Should be a list (empty in mock mode)
+        # Should be a list
         assert isinstance(data, list)
-        assert len(data) == 0  # Mock mode should have no alerts
+        
+        # If alerts exist, validate their structure
+        if len(data) > 0:
+            alert = data[0]
+            assert "id" in alert
+            assert "severity" in alert
+            assert "title" in alert
+            assert "message" in alert
+            assert "created_at" in alert
+            assert "acknowledged" in alert
     
     def test_api_endpoints_return_json(self):
         """Test that all API endpoints return valid JSON with correct content type"""

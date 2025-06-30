@@ -95,6 +95,28 @@ This is a defensive security tool designed for authorized network monitoring onl
 ## Testing Infrastructure
 
 ### End-to-End Testing with Playwright
+
+**For Claude Code Development:**
+When working on web-related features or testing, always use the Playwright MCP server tools instead of writing traditional Playwright test files. This provides direct browser automation capabilities through the following MCP tools:
+
+- `mcp__playwright__browser_navigate` - Navigate to URLs
+- `mcp__playwright__browser_snapshot` - Capture page state for analysis
+- `mcp__playwright__browser_click` - Click elements
+- `mcp__playwright__browser_type` - Fill forms and input fields
+- `mcp__playwright__browser_take_screenshot` - Visual verification
+- Additional browser automation tools for comprehensive testing
+
+Start the application with `docker-compose up -d` and use these MCP tools to interact with the dashboard at http://localhost:8080.
+
+**Documentation and API References:**
+For up-to-date library documentation and API references, use the Context7 MCP server tools:
+
+- `mcp__context7__resolve-library-id` - Find the correct library ID for any package/framework
+- `mcp__context7__get-library-docs` - Fetch current documentation for libraries used in the project
+
+This is especially useful for Flask, SQLAlchemy, APScheduler, and other Python libraries to ensure you're using current best practices and APIs.
+
+**Traditional Playwright Testing:**
 ```bash
 # Install test dependencies
 pip install -r requirements-test.txt

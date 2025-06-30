@@ -4,9 +4,16 @@ services:
       context: .
       dockerfile: docker/Dockerfile.dev
     container_name: argus-scanner
+    privileged: true  # Required for network scanning
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
     volumes:
       - ./src:/app/src
       - ./config:/app/config
+      - ./tests:/app/tests
+      - ./requirements-test.txt:/app/requirements-test.txt
+      - ./pytest.ini:/app/pytest.ini
       - argus_data:/app/data
       - argus_logs:/app/logs
     ports:
@@ -14,11 +21,11 @@ services:
       - "5678:5678"  # Python debugger
     environment:
       - ARGUS_ENV=development
-      - ARGUS_MOCK_MODE=true
+      - ARGUS_MOCK_MODE=false
       - ARGUS_DB_PATH=/app/data/argus.db
       - ARGUS_LOG_LEVEL=DEBUG
       - ARGUS_SCAN_INTERVAL=300  # 5 minutes in dev
-      - ARGUS_NETWORK_RANGE=192.168.1.0/24
+      - ARGUS_NETWORK_RANGE=192.168.4.0/22  # Your local network
     networks:
       - argus_net
     restart: unless-stopped
