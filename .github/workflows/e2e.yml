@@ -24,7 +24,7 @@ jobs:
       uses: actions/checkout@v4
     
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
     
@@ -51,7 +51,7 @@ jobs:
         pytest tests/e2e/ -v --html=e2e-report.html --self-contained-html
     
     - name: Upload E2E test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: e2e-test-results
@@ -74,7 +74,7 @@ jobs:
       uses: actions/checkout@v4
     
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
     
@@ -96,7 +96,7 @@ jobs:
         pytest tests/performance/ -v --html=performance-report.html --self-contained-html
     
     - name: Upload performance test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: performance-test-results
@@ -117,7 +117,7 @@ jobs:
       uses: actions/checkout@v4
     
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
     
@@ -139,7 +139,7 @@ jobs:
         pytest tests/security/ -v --html=security-report.html --self-contained-html
     
     - name: Upload security test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: security-test-results

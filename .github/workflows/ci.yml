@@ -20,7 +20,7 @@ jobs:
       uses: actions/checkout@v4
     
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
     
@@ -121,7 +121,7 @@ jobs:
         output-file: sbom.json
     
     - name: Upload SBOM
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: sbom
         path: sbom.json
@@ -141,7 +141,7 @@ jobs:
         output: 'trivy-results.sarif'
     
     - name: Upload Trivy scan results to GitHub Security
-      uses: github/codeql-action/upload-sarif@v2
+      uses: github/codeql-action/upload-sarif@v3
       if: always()
       with:
         sarif_file: 'trivy-results.sarif'
