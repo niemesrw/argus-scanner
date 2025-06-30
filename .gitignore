@@ -93,4 +93,4 @@ Thumbs.db
 # Project specific
 instance/
 migrations/versions/
-node_modules/
+node_modules/worktrees/
