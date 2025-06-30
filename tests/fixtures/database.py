@@ -47,6 +47,7 @@ def test_service(db_session, test_device) -> Service:
 def test_vulnerability(db_session, test_service) -> Vulnerability:
     """Create a basic test vulnerability."""
     from src.database.models import Severity
+
     vulnerability = Vulnerability(
         service_id=test_service.id,
         cve_id="CVE-2021-44228",
@@ -66,6 +67,7 @@ def test_vulnerability(db_session, test_service) -> Vulnerability:
 def test_scan(db_session) -> Scan:
     """Create a basic test scan."""
     from src.database.models import ScanType
+
     scan = Scan(
         scan_type=ScanType.VULNERABILITY,
         status="completed",
@@ -86,6 +88,7 @@ def test_scan(db_session) -> Scan:
 def test_alert(db_session, test_vulnerability) -> Alert:
     """Create a basic test alert."""
     from src.database.models import Severity
+
     alert = Alert(
         vulnerability_id=test_vulnerability.id,
         severity=Severity.CRITICAL,
@@ -233,6 +236,7 @@ class VulnerabilityFactory:
     def create(db_session, service: Service, **kwargs) -> Vulnerability:
         """Create a vulnerability for a service."""
         from src.database.models import Severity
+
         template = random.choice(VulnerabilityFactory.CVE_TEMPLATES)
         severity_map = {
             "critical": Severity.CRITICAL,
@@ -307,8 +311,16 @@ class ScanFactory:
         )
 
         from src.database.models import ScanType
+
         defaults = {
-            "scan_type": random.choice([ScanType.DISCOVERY, ScanType.PORT_SCAN, ScanType.VULNERABILITY, ScanType.SERVICE_DETECTION]),
+            "scan_type": random.choice(
+                [
+                    ScanType.DISCOVERY,
+                    ScanType.PORT_SCAN,
+                    ScanType.VULNERABILITY,
+                    ScanType.SERVICE_DETECTION,
+                ]
+            ),
             "status": "completed",
             "target_range": "192.168.1.0/24",
             "started_at": started_at,
@@ -364,12 +376,15 @@ class AlertFactory:
     ) -> Alert:
         """Create an alert."""
         from src.database.models import Severity
+
         if vulnerability:
             title = f"{vulnerability.severity.value.title()} Vulnerability Detected"
             message = f"{vulnerability.cve_id} found"
             severity = vulnerability.severity
         else:
-            severity = random.choice([Severity.LOW, Severity.MEDIUM, Severity.HIGH, Severity.CRITICAL])
+            severity = random.choice(
+                [Severity.LOW, Severity.MEDIUM, Severity.HIGH, Severity.CRITICAL]
+            )
             title = f"{severity.value.title()} Security Event"
             message = f"Security event detected"
 
@@ -482,7 +497,9 @@ def populate_test_database(db_session):
                 data["services"].append(service)
 
             # Create vulnerabilities for services
-            for service in data["services"][-services_per_device:]:  # For recent services
+            for service in data["services"][
+                -services_per_device:
+            ]:  # For recent services
                 if random.random() > 0.3:  # 70% chance of vulnerabilities
                     vulns = VulnerabilityFactory.create_batch(
                         db_session, service, random.randint(1, vulns_per_device)
@@ -492,6 +509,7 @@ def populate_test_database(db_session):
                     # Create alerts for critical vulnerabilities
                     for vuln in vulns:
                         from src.database.models import Severity
+
                         if vuln.severity == Severity.CRITICAL and random.random() > 0.5:
                             alert = AlertFactory.create(db_session, vuln)
                             data["alerts"].append(alert)

@@ -81,6 +81,7 @@ def app():
     except ImportError:
         # If web app doesn't exist yet, create a minimal mock
         import pytest
+
         pytest.skip("Web app not implemented yet")
 
 
