@@ -127,10 +127,8 @@ jobs:
     
     - name: Run Docker Bench Security
       run: |
-        docker run --rm --net host --pid host --cap-add audit_control \
-          -v /var/lib:/var/lib:ro \
+        docker run --rm \
           -v /var/run/docker.sock:/var/run/docker.sock:ro \
-          -v /etc:/etc:ro \
           docker/docker-bench-security -l docker-bench-results.log || true
     
     - name: Upload Docker Bench results

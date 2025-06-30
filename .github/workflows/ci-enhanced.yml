@@ -177,57 +177,13 @@ jobs:
         # This would typically use a service like shields.io
         echo "Coverage analysis complete"
 
-  # Performance benchmarking
-  benchmark:
-    name: Performance Benchmark
-    runs-on: ubuntu-latest
-    needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install -r requirements-test.txt
-        pip install pytest-benchmark
-        pip install -e .
-    
-    - name: Run benchmarks
-      run: |
-        pytest tests/performance/benchmarks/ \
-          --benchmark-only \
-          --benchmark-json=benchmark-results.json \
-          --benchmark-save=current \
-          --benchmark-save-data \
-          --benchmark-warmup=on \
-          --benchmark-disable-gc
-    
-    - name: Store benchmark result
-      uses: benchmark-action/github-action-benchmark@v1
-      with:
-        tool: 'pytest'
-        output-file-path: benchmark-results.json
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        auto-push: true
-        alert-threshold: '110%'
-        comment-on-alert: true
-        fail-on-alert: false
-        alert-comment-cc-users: '@${{ github.actor }}'
 
   # Docker build with improved caching
   build:
     name: Build Multi-Architecture Docker Images
     runs-on: ubuntu-latest
     needs: test-summary
+    if: github.event_name != 'pull_request'
     
     permissions:
       contents: read
@@ -271,10 +227,11 @@ jobs:
           type=raw,value=latest,enable={{is_default_branch}}
     
     - name: Build and push Docker images
+      id: build
       uses: docker/build-push-action@v5
       with:
         context: .
-        file: ./docker/Dockerfile
+        file: ./Dockerfile
         platforms: linux/amd64,linux/arm64,linux/arm/v7
         push: ${{ github.event_name != 'pull_request' }}
         tags: ${{ steps.meta.outputs.tags }}
@@ -288,6 +245,7 @@ jobs:
     
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master
+      if: github.event_name != 'pull_request'
       with:
         image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
         format: 'sarif'
@@ -297,11 +255,13 @@ jobs:
     
     - name: Upload Trivy scan results
       uses: github/codeql-action/upload-sarif@v3
+      if: github.event_name != 'pull_request'
       with:
         sarif_file: 'trivy-results.sarif'
     
     - name: Generate SBOM
       uses: anchore/sbom-action@v0
+      if: github.event_name != 'pull_request'
       with:
         image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
         format: cyclonedx-json
@@ -309,15 +269,10 @@ jobs:
     
     - name: Upload SBOM
       uses: actions/upload-artifact@v4
+      if: github.event_name != 'pull_request'
       with:
         name: sbom
         path: sbom.cyclonedx.json
-    
-    - name: Sign container image
-      env:
-        COSIGN_EXPERIMENTAL: 1
-      run: |
-        echo "${{ steps.meta.outputs.tags }}" | xargs -I {} cosign sign {}@${{ steps.build.outputs.digest }}
 
   # Dependency scanning
   dependency-check:

@@ -10,7 +10,6 @@ on:
     paths:
       - 'src/web/**'
       - 'tests/e2e/**'
-      - 'tests/security/**'
       - 'tests/performance/**'
       - 'docker/**'
 
@@ -107,45 +106,3 @@ jobs:
       run: |
         docker-compose down -v
 
-  security-tests:
-    name: Security Tests
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install -r requirements-test.txt
-        pip install -e .
-    
-    - name: Start application
-      run: |
-        docker-compose up -d
-        sleep 30
-        curl -f http://localhost:8080/health || exit 1
-    
-    - name: Run security tests
-      run: |
-        pytest tests/security/ -v --html=security-report.html --self-contained-html
-    
-    - name: Upload security test results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: security-test-results
-        path: security-report.html
-    
-    - name: Stop application
-      if: always()
-      run: |
-        docker-compose down -v

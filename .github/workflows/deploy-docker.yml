@@ -174,19 +174,19 @@ jobs:
         
         # Create environment file template
         cat > deployment/.env.staging << 'EOF'
-        REGISTRY=ghcr.io
-        IMAGE_NAME=niemesrw/argus-scanner
-        VERSION=main
-        ARGUS_NETWORK_RANGE=192.168.1.0/24
-        ARGUS_SECRET_KEY=staging-secret-key-change-in-production
+        REGISTRY=${{ env.REGISTRY }}
+        IMAGE_NAME=${{ env.IMAGE_NAME }}
+        VERSION=${{ needs.pre-deploy-check.outputs.deploy_version }}
+        ARGUS_NETWORK_RANGE=${{ secrets.PI_NETWORK_RANGE || '192.168.1.0/24' }}
+        ARGUS_SECRET_KEY=${{ secrets.STAGING_SECRET_KEY || 'staging-secret-change-me' }}
         ARGUS_ENABLE_EMAIL_ALERTS=false
-        ARGUS_SMTP_HOST=
-        ARGUS_SMTP_PORT=587
-        ARGUS_SMTP_USERNAME=
-        ARGUS_SMTP_PASSWORD=
-        ARGUS_ALERT_FROM=
-        ARGUS_ALERT_TO=
-        ARGUS_SLACK_WEBHOOK=
+        ARGUS_SMTP_HOST=${{ secrets.SMTP_HOST }}
+        ARGUS_SMTP_PORT=${{ secrets.SMTP_PORT || '587' }}
+        ARGUS_SMTP_USERNAME=${{ secrets.SMTP_USERNAME }}
+        ARGUS_SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+        ARGUS_ALERT_FROM=${{ secrets.ALERT_FROM }}
+        ARGUS_ALERT_TO=${{ secrets.ALERT_TO }}
+        ARGUS_SLACK_WEBHOOK=${{ secrets.SLACK_WEBHOOK }}
         EOF
     
     - name: Deploy to staging host
@@ -379,16 +379,16 @@ jobs:
         ssh ${{ secrets.PI_USERNAME }}@${{ needs.pre-deploy-check.outputs.target_host }} << 'EOF'
           cd /home/${{ secrets.PI_USERNAME }}/argus-scanner
           
-          # Create .env file with secrets (you'll need to set these manually or via secrets)
+          # Create production environment file
           cat > .env.prod << 'ENVEOF'
         REGISTRY=${{ env.REGISTRY }}
         IMAGE_NAME=${{ env.IMAGE_NAME }}
         VERSION=${{ needs.pre-deploy-check.outputs.deploy_version }}
-        ARGUS_NETWORK_RANGE=${{ secrets.PI_NETWORK_RANGE }}
+        ARGUS_NETWORK_RANGE=${{ secrets.PI_NETWORK_RANGE || '192.168.1.0/24' }}
         ARGUS_SECRET_KEY=${{ secrets.ARGUS_SECRET_KEY }}
-        ARGUS_ENABLE_EMAIL_ALERTS=${{ secrets.ALERT_EMAIL_ENABLED }}
+        ARGUS_ENABLE_EMAIL_ALERTS=${{ secrets.ALERT_EMAIL_ENABLED || 'true' }}
         ARGUS_SMTP_HOST=${{ secrets.SMTP_HOST }}
-        ARGUS_SMTP_PORT=${{ secrets.SMTP_PORT }}
+        ARGUS_SMTP_PORT=${{ secrets.SMTP_PORT || '587' }}
         ARGUS_SMTP_USERNAME=${{ secrets.SMTP_USERNAME }}
         ARGUS_SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
         ARGUS_ALERT_FROM=${{ secrets.ALERT_FROM }}
