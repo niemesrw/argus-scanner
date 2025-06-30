@@ -41,8 +41,16 @@ pip install -r requirements.txt
 # Install with development extras
 pip install -e ".[dev]"
 
-# Run tests
+# Run fast unit tests only (for CI)
+pytest tests/ -v --cov=src --ignore=tests/e2e/ --ignore=tests/performance/
+
+# Run all tests including E2E (slow)
 pytest tests/ -v --cov=src
+
+# Run specific test categories
+pytest tests/ -m "unit" -v          # Unit tests only
+pytest tests/ -m "e2e" -v           # E2E tests only
+pytest tests/ -m "integration" -v   # Integration tests only
 
 # Code formatting and linting
 black src/ tests/
@@ -93,6 +101,20 @@ This is a defensive security tool designed for authorized network monitoring onl
 4. All scanning activities are logged for audit purposes
 
 ## Testing Infrastructure
+
+### GitHub Actions Workflows
+
+**Fast CI Pipeline (.github/workflows/ci.yml):**
+- Runs on every push and pull request
+- Executes unit and integration tests only (skips E2E and performance)
+- Includes linting, type checking, security scans, and Docker builds
+- Optimized for speed to provide quick feedback
+
+**E2E and Performance Tests (.github/workflows/e2e.yml):**
+- Runs nightly or manually triggered
+- Includes comprehensive Playwright E2E tests
+- Performance testing with load scenarios
+- Only runs on web-related changes or when manually triggered
 
 ### End-to-End Testing with Playwright
 

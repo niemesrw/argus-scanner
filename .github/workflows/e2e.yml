@@ -1,0 +1,104 @@
+name: E2E Tests
+
+on:
+  workflow_dispatch:  # Manual trigger
+  schedule:
+    # Run E2E tests nightly at 2 AM UTC
+    - cron: '0 2 * * *'
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/web/**'
+      - 'tests/e2e/**'
+      - 'docker/**'
+
+jobs:
+  e2e-tests:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-test.txt
+    
+    - name: Install Playwright
+      run: |
+        playwright install --with-deps chromium
+    
+    - name: Start application
+      run: |
+        docker-compose up -d
+        # Wait for application to be ready
+        sleep 30
+        curl -f http://localhost:8080/health || exit 1
+    
+    - name: Run E2E tests
+      run: |
+        pytest tests/e2e/ -v --html=e2e-report.html --self-contained-html
+    
+    - name: Upload E2E test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: e2e-test-results
+        path: |
+          e2e-report.html
+          screenshots/
+    
+    - name: Stop application
+      if: always()
+      run: |
+        docker-compose down -v
+
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-test.txt
+    
+    - name: Start application
+      run: |
+        docker-compose up -d
+        sleep 30
+        curl -f http://localhost:8080/health || exit 1
+    
+    - name: Run performance tests
+      run: |
+        pytest tests/performance/ -v --html=performance-report.html --self-contained-html
+    
+    - name: Upload performance test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: performance-test-results
+        path: performance-report.html
+    
+    - name: Stop application
+      if: always()
+      run: |
+        docker-compose down -v
