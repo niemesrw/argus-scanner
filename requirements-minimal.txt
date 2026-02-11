@@ -19,7 +19,7 @@ apscheduler==3.10.4
 python-dotenv==1.0.0
 
 # Security
-cryptography==44.0.1
+cryptography==46.0.5
 
 # Utilities
 click==8.1.7
