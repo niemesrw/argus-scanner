@@ -7,7 +7,7 @@ sqlalchemy==2.0.23
 
 # Network scanning
 python-nmap==0.7.1
-scapy==2.5.0
+scapy==2.7.0rc1
 netifaces==0.11.0
 
 # Vulnerability detection
@@ -25,7 +25,7 @@ emails==0.6
 slack-sdk==3.26.1
 
 # Security and validation
-cryptography==44.0.1
+cryptography==46.0.5
 pydantic==2.5.2
 python-jose==3.4.0
 
